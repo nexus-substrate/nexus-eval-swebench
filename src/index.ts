@@ -1,15 +1,15 @@
 /**
- * Library entry point. Exposes the adapter so other projects can
- * compose it into their own harnesses (e.g., a dashboard that runs
- * multiple benchmarks).
+ * Library entry point. Exposes the adapter + types so other projects can
+ * compose the SWE-bench harness into their own workflows (e.g., a
+ * dashboard that runs multiple benchmarks).
  *
  * @module index
  */
 
 export {
-  TemplateBenchmarkAdapter,
-  type BenchmarkInstance,
-  type BenchmarkPrediction,
-  type BenchmarkEvalResult,
-  type BenchmarkConfig,
+  SweBenchAdapter,
+  type SweBenchAdapterConfig,
+  type SweBenchAdapterEvalResult,
+  type SweBenchInstance,
+  type SweBenchPrediction,
 } from './adapter.js';

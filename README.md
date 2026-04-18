@@ -1,77 +1,82 @@
-# nexus-eval-template
+# nexus-eval-swebench
 
-Scaffold for building a new nexus-agents evaluation / benchmark harness.
+SWE-bench (Lite / Verified / Full) evaluation harness for [nexus-agents](https://github.com/williamzujkowski/nexus-agents), implementing the `BenchmarkAdapter` contract from nexus-agents ≥ 2.33.1.
 
-Copy this repo, implement the adapter methods against your benchmark, publish as `nexus-eval-<name>`. Any benchmark you can express as `load instances → produce prediction → evaluate verdict` fits.
+Extracted from the in-tree `packages/nexus-agents/src/swe-bench/` suite per [epic #1960](https://github.com/williamzujkowski/nexus-agents/issues/1960) so benchmarks can evolve independently of the core.
 
-## What you get
+## Install
 
-- `src/adapter.ts` — `BenchmarkAdapter` stub with all 4 required methods and inline "replace this" comments
-- `src/cli.ts` — CLI entry point that invokes `runBenchmark()` from nexus-agents
-- `src/index.ts` — library export so your adapter can be composed by other tools
-- `src/adapter.test.ts` — smoke tests proving the scaffold runs
-- `tsconfig.json`, `package.json` — TypeScript strict, vitest, Node 22+
-- MIT license, peer dependency on `nexus-agents >= 2.33.0`
+```sh
+npm install nexus-eval-swebench nexus-agents
+```
+
+`nexus-agents` is a peer dependency.
 
 ## Quick start
 
 ```sh
-# 1. Copy this repo
-gh repo create yourname/nexus-eval-<bench> --template williamzujkowski/nexus-eval-template --public
+# Run 5 SWE-bench Lite instances in parallel
+npx nexus-eval-swebench --variant lite --limit 5 --concurrency 3
 
-# 2. Clone + install
-gh repo clone yourname/nexus-eval-<bench>
-cd nexus-eval-<bench>
-npm install
-
-# 3. Sanity check — the template tests pass out of the box
-npm test
+# JSON summary for piping into a dashboard
+npx nexus-eval-swebench --variant verified --json > run.json
 ```
 
-## The contract
-
-Every `nexus-eval-*` package implements one interface from `nexus-agents`:
+## Library usage
 
 ```ts
-interface BenchmarkAdapter<TInstance, TPrediction, TEvalResult> {
-  readonly name: string;
-  readonly variant?: string;
-  loadInstances(config): Promise<readonly TInstance[]>;
-  runInstance(instance, ctx): Promise<TPrediction>;
-  evaluate(instance, prediction): Promise<TEvalResult>;
-  isPass(result): boolean;
-  summarize(results, runTimeMs): BenchmarkRunSummary;
-}
+import { runBenchmark } from 'nexus-agents';
+import { SweBenchAdapter } from 'nexus-eval-swebench';
+
+const adapter = new SweBenchAdapter({ variant: 'lite' });
+const summary = await runBenchmark(adapter, {}, { concurrency: 4, limit: 10 });
+console.log(`Resolved ${summary.passed}/${summary.total} (${(summary.passRate * 100).toFixed(1)}%)`);
 ```
 
-The orchestrator (`runBenchmark` in nexus-agents) handles concurrency, timeouts, progress, and partial failure for you — you don't reimplement the harness.
+## What this harness does
 
-## Implementation steps
+- Loads SWE-bench instances via the published `SWEBenchRunner` from nexus-agents.
+- Invokes the configured agent executor to generate one `model_patch` per instance.
+- Surfaces prediction-generation success/failure as the adapter verdict.
+- Aggregates totals, error count, and token usage into a `BenchmarkRunSummary`.
 
-1. **Rename** `nexus-eval-BENCHMARK` to your benchmark name in `package.json` (name, bin, description).
-2. **Replace `BenchmarkInstance` / `BenchmarkPrediction` / `BenchmarkEvalResult`** in `src/adapter.ts` with your benchmark's actual shapes.
-3. **Implement `loadInstances`** — read your dataset from disk or fetch from an API.
-4. **Implement `runInstance`** — call your solver (usually a CLI subprocess or API call).
-5. **Implement `evaluate`** — run tests / diff against ground truth / grade with an LLM.
-6. **Customize `summarize`** — add benchmark-specific breakdowns in `metadata` (pass-by-category, dataset version, etc.).
-7. **Customize the CLI** — most of `src/cli.ts` stays the same; update flags for variant names specific to your benchmark.
-8. **Tag your repo** — `gh repo edit --add-topic nexus-agents-eval` so `ECOSYSTEM.md` discovery works.
+## What this harness does NOT do (yet)
 
-## Tips
+**True pass/fail based on actual test runs requires the SWE-bench Docker evaluation harness** — which runs each predicted patch against the original repo's test suite. This adapter's `isPass` reflects whether *prediction generation* completed without error, not whether the patch *resolves the issue*.
 
-- **No HTTP server needed.** Adapters are libraries + CLIs. nexus-agents is a peer dependency; you don't need to run its MCP server to exercise the contract.
-- **Per-instance failures don't abort the run.** If one instance throws, `runBenchmark` records it in `summary.metadata.failureCount` and continues.
-- **Honor `ctx.signal`** in your `runInstance` so long runs can be cancelled.
-- **Put variants into `config` or the constructor**, not CLI flags passed through to every instance. Example: `new MyBenchAdapter({ variant: 'lite' })`.
-- **Keep pure evaluation separate from network calls.** Makes the tests reproducible and fast.
+To get real test-based resolution on the predictions this harness emits:
 
-## Existing benchmarks using this pattern
+```ts
+import { EvaluationHarness } from 'nexus-agents';
 
-- [nexus-eval-swebench](https://github.com/williamzujkowski/nexus-eval-swebench) — SWE-bench Lite/Verified/Full (extraction tracked by nexus-agents #1962)
+const evalHarness = new EvaluationHarness();
+const result = await evalHarness.evaluate(predictions, {
+  datasetName: 'lite',
+  predictionsPath: './predictions.jsonl',
+  runId: 'my-run',
+  maxWorkers: 8,
+  cacheLevel: 'env',
+  mode: 'docker',
+  timeoutSeconds: 1800,
+});
+```
 
-## Ecosystem
+Wiring the Docker harness directly into `SweBenchAdapter.evaluate()` is tracked as future work — it requires a Docker daemon at runtime, which is out of scope for a generic npm-installable harness.
 
-See [nexus-agents ECOSYSTEM.md](https://github.com/williamzujkowski/nexus-agents/blob/main/ECOSYSTEM.md) for the full registry.
+## Configuration
+
+`SweBenchAdapterConfig`:
+
+| Field     | Type                               | Default  | Notes                                  |
+| --------- | ---------------------------------- | -------- | -------------------------------------- |
+| `variant` | `'lite' \| 'verified' \| 'full'`   | `'lite'` | Which SWE-bench split to load.         |
+| `runner`  | `Partial<SWEBenchConfig>`          | `{}`     | Pass-through to the underlying runner. |
+
+## Related
+
+- [nexus-agents](https://github.com/williamzujkowski/nexus-agents) — MCP server + BenchmarkAdapter contract
+- [nexus-eval-template](https://github.com/williamzujkowski/nexus-eval-template) — scaffold this repo was built from
+- [SWE-bench paper](https://arxiv.org/abs/2310.06770)
 
 ## License
 
