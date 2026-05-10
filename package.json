@@ -1,7 +1,7 @@
 {
   "name": "nexus-eval-swebench",
-  "version": "0.1.0",
-  "description": "SWE-bench (Lite/Verified/Full) evaluation harness for nexus-agents, implementing the BenchmarkAdapter contract",
+  "version": "0.2.0",
+  "description": "SWE-bench (Lite/Verified/Full) evaluation harness for nexus-agents — clean-room implementation, model-only baseline",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
