@@ -3,18 +3,24 @@
  * SWE-bench evaluation CLI.
  *
  * Usage:
- *   nexus-eval-swebench run [--variant lite|verified|full] [--limit N] [--concurrency N]
- *   nexus-eval-swebench --json > results.json
+ *   nexus-eval-swebench [run] [--variant lite|verified|full] [options]
+ *   nexus-eval-swebench --version
  *   nexus-eval-swebench --help
+ *
+ * Constructs an OpenAI-compatible `IModelAdapter` from env vars
+ * (`OPENAI_API_KEY`, optional `OPENAI_BASE_URL`, `MODEL_ID`). Operators
+ * who need a different adapter shape (Claude API, Ollama local, …) can
+ * compose `SweBenchAdapter` directly via the library API in `index.ts`.
  *
  * @module cli
  */
 
 import { parseArgs } from 'node:util';
-import { runBenchmark, type SWEBenchVariant } from 'nexus-agents';
+import { runBenchmark, createOpenAIAdapter } from 'nexus-agents';
 import { SweBenchAdapter } from './adapter.js';
+import type { SweBenchAdapterConfig, SweBenchVariant } from './types.js';
 
-const VALID_VARIANTS: readonly SWEBenchVariant[] = ['lite', 'verified', 'full'];
+const VALID_VARIANTS: readonly SweBenchVariant[] = ['lite', 'verified', 'full'];
 
 const HELP = `nexus-eval-swebench — SWE-bench harness for nexus-agents
 
@@ -25,25 +31,39 @@ Usage:
 
 Options:
   --variant <lite|verified|full>  Dataset variant. Default: lite.
-  --limit <n>                     Limit instances evaluated. Default: all.
+  --model-id <id>                 Model identifier passed to the OpenAI-compat
+                                  endpoint. Default: env MODEL_ID or 'gpt-4o'.
+  --dataset <huggingface|path>    Dataset source. Default: huggingface.
+  --cache-dir <dir>               Cache dir for HF downloads.
+  --limit <n>                     Limit instances. Default: all.
   --concurrency <n>               Max parallel solver calls. Default: 1.
   --timeout <ms>                  Per-instance timeout. Default: 300000.
-  --json                          Emit JSON summary instead of human text.
+  --json                          JSON summary instead of human text.
   --help, -h                      Show this help.
   --version, -v                   Show version.
 
+Environment:
+  OPENAI_API_KEY      (required) auth for the OpenAI-compat endpoint.
+  OPENAI_BASE_URL     (optional) override base URL — point at a workspace
+                                proxy or self-hosted vLLM / OpenRouter / etc.
+  MODEL_ID            (optional) model identifier — overridden by --model-id.
+
 Notes:
-  This harness produces PREDICTIONS via nexus-agents' SWEBenchRunner. For
-  true test-based resolution, run the SWE-bench Docker evaluation harness
-  on the emitted predictions file — see the README.
+  v0.2 is a model-only baseline — sends each instance's problem_statement
+  to the model and parses a unified diff out of the response. Pass/fail
+  reflects "did the model produce a non-empty patch", NOT test-based
+  resolution. For test-based pass/fail, run the SWE-bench Docker harness
+  on the emitted predictions file (out of MVP scope).
 `;
 
-function parseVariant(input: string | undefined): SWEBenchVariant {
+function parseVariant(input: string | undefined): SweBenchVariant {
   if (input === undefined) return 'lite';
-  if (!VALID_VARIANTS.includes(input as SWEBenchVariant)) {
-    throw new Error(`Invalid --variant '${input}'. Must be one of: ${VALID_VARIANTS.join(', ')}`);
+  if (!VALID_VARIANTS.includes(input as SweBenchVariant)) {
+    throw new Error(
+      `Invalid --variant '${input}'. Must be one of: ${VALID_VARIANTS.join(', ')}`
+    );
   }
-  return input as SWEBenchVariant;
+  return input as SweBenchVariant;
 }
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -53,7 +73,7 @@ async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
   if (args.includes('--version') || args.includes('-v')) {
-    process.stdout.write('nexus-eval-swebench 0.1.0\n');
+    process.stdout.write('nexus-eval-swebench 0.2.0\n');
     return 0;
   }
 
@@ -61,6 +81,9 @@ async function main(argv: readonly string[]): Promise<number> {
     args: args[0] === 'run' ? args.slice(1) : args,
     options: {
       variant: { type: 'string' },
+      'model-id': { type: 'string' },
+      dataset: { type: 'string' },
+      'cache-dir': { type: 'string' },
       limit: { type: 'string' },
       concurrency: { type: 'string', default: '1' },
       timeout: { type: 'string', default: '300000' },
@@ -70,12 +93,36 @@ async function main(argv: readonly string[]): Promise<number> {
     strict: true,
   });
 
+  const apiKey = process.env['OPENAI_API_KEY']?.trim();
+  if (apiKey === undefined || apiKey === '') {
+    process.stderr.write(
+      'Error: OPENAI_API_KEY is not set. Set it to the auth token for your\n' +
+        'OpenAI-compat endpoint (real OpenAI, a workspace proxy, vLLM, etc.).\n'
+    );
+    return 2;
+  }
+
   const variant = parseVariant(parsed.values.variant);
-  const limit = parsed.values.limit !== undefined ? Number(parsed.values.limit) : undefined;
+  const modelId =
+    parsed.values['model-id'] ?? process.env['MODEL_ID'] ?? 'gpt-4o';
+  const baseUrl = process.env['OPENAI_BASE_URL'];
+  const limit =
+    parsed.values.limit !== undefined ? Number(parsed.values.limit) : undefined;
   const concurrency = Number(parsed.values.concurrency ?? '1');
   const timeoutMs = Number(parsed.values.timeout ?? '300000');
 
-  const adapter = new SweBenchAdapter({ variant });
+  const modelAdapter = createOpenAIAdapter({
+    apiKey,
+    modelId,
+    ...(baseUrl !== undefined && baseUrl !== '' && { baseUrl }),
+  });
+
+  const adapterConfig: SweBenchAdapterConfig = {
+    variant,
+    ...(parsed.values.dataset !== undefined && { dataset: parsed.values.dataset }),
+    ...(parsed.values['cache-dir'] !== undefined && { cacheDir: parsed.values['cache-dir'] }),
+  };
+  const adapter = new SweBenchAdapter(modelAdapter, adapterConfig);
 
   const summary = await runBenchmark(adapter, {}, {
     concurrency,
@@ -92,10 +139,12 @@ async function main(argv: readonly string[]): Promise<number> {
     process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
   } else {
     process.stdout.write('\n');
-    process.stdout.write(`${adapter.name} (${adapter.variant})\n`);
-    process.stdout.write(`  passed:  ${String(summary.passed)} / ${String(summary.total)}\n`);
-    process.stdout.write(`  rate:    ${(summary.passRate * 100).toFixed(1)}%\n`);
-    process.stdout.write(`  runtime: ${(summary.runTimeMs / 1000).toFixed(1)}s\n`);
+    process.stdout.write(`${adapter.name} (${adapter.variant}, model=${modelId})\n`);
+    process.stdout.write(
+      `  generated:  ${String(summary.passed)} / ${String(summary.total)} non-empty patches\n`
+    );
+    process.stdout.write(`  rate:       ${(summary.passRate * 100).toFixed(1)}%\n`);
+    process.stdout.write(`  runtime:    ${(summary.runTimeMs / 1000).toFixed(1)}s\n`);
   }
 
   return summary.passed === summary.total ? 0 : 1;
