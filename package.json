@@ -40,5 +40,9 @@
     "nexus-agents": "^2.33.1",
     "typescript": "^5.9.0",
     "vitest": "^4.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

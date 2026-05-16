@@ -3,8 +3,14 @@ name: Release
 # Publishes the package to npm on tag push (e.g., `git tag v0.2.0 && git push --tags`).
 # Also exposes a workflow_dispatch trigger for manual publication from main.
 #
-# Required secret: NPM_TOKEN — an npm automation token with publish access to
-# the `nexus-eval-swebench` package.
+# Auth: npm trusted publishing via OIDC. No long-lived NPM_TOKEN required.
+# One-time setup on npm: Settings → Trusted Publishers → Add publisher
+#   - Publisher: GitHub Actions
+#   - Organization: williamzujkowski
+#   - Repository: nexus-eval-swebench
+#   - Workflow filename: release.yml
+# After that, `id-token: write` + `npm publish --provenance` authenticates
+# via the workflow's OIDC token and signs the artifact via Sigstore.
 
 on:
   push:
@@ -13,7 +19,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write  # npm provenance
+  id-token: write # OIDC auth to npm + Sigstore provenance signing
 
 jobs:
   publish:
@@ -30,5 +36,3 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
