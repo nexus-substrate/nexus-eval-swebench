@@ -1,6 +1,6 @@
 {
   "name": "nexus-eval-swebench",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "SWE-bench (Lite/Verified/Full) evaluation harness for nexus-agents — clean-room implementation, model-only baseline",
   "type": "module",
   "main": "dist/index.js",
