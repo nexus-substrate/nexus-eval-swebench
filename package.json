@@ -4,11 +4,11 @@
   "description": "SWE-bench (Lite/Verified/Full) evaluation harness for nexus-agents — clean-room implementation, model-only baseline",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/williamzujkowski/nexus-eval-swebench.git"
+    "url": "git+https://github.com/nexus-substrate/nexus-eval-swebench.git"
   },
-  "homepage": "https://github.com/williamzujkowski/nexus-eval-swebench#readme",
+  "homepage": "https://github.com/nexus-substrate/nexus-eval-swebench#readme",
   "bugs": {
-    "url": "https://github.com/williamzujkowski/nexus-eval-swebench/issues"
+    "url": "https://github.com/nexus-substrate/nexus-eval-swebench/issues"
   },
   "type": "module",
   "main": "dist/index.js",

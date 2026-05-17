@@ -1,8 +1,8 @@
 # nexus-eval-swebench
 
-SWE-bench (Lite / Verified / Full) evaluation harness for [nexus-agents](https://github.com/williamzujkowski/nexus-agents), implementing the `BenchmarkAdapter` contract.
+SWE-bench (Lite / Verified / Full) evaluation harness for [nexus-agents](https://github.com/nexus-substrate/nexus-agents), implementing the `BenchmarkAdapter` contract.
 
-> **v0.2 — clean-room re-implementation.** This harness is now self-contained: it depends only on public `nexus-agents` types (`BenchmarkAdapter`, `IModelAdapter`, `runBenchmark`) — no internal helpers, no in-tree runtime imports. The original v0.1 thin wrapper around the in-tree `SWEBenchRunner` is replaced by a model-only baseline implemented locally. See [nexus-agents #2515](https://github.com/williamzujkowski/nexus-agents/issues/2515) for the extraction rationale.
+> **v0.2 — clean-room re-implementation.** This harness is now self-contained: it depends only on public `nexus-agents` types (`BenchmarkAdapter`, `IModelAdapter`, `runBenchmark`) — no internal helpers, no in-tree runtime imports. The original v0.1 thin wrapper around the in-tree `SWEBenchRunner` is replaced by a model-only baseline implemented locally. See [nexus-agents #2515](https://github.com/nexus-substrate/nexus-agents/issues/2515) for the extraction rationale.
 
 ## Install
 
@@ -96,9 +96,9 @@ Environment for the CLI: `OPENAI_API_KEY` (required), `OPENAI_BASE_URL` (optiona
 
 ## Related
 
-- [nexus-agents](https://github.com/williamzujkowski/nexus-agents) — MCP server + `BenchmarkAdapter` contract
-- [nexus-eval-template](https://github.com/williamzujkowski/nexus-eval-template) — scaffold this repo was built from
-- [nexus-eval-atbench](https://github.com/williamzujkowski/nexus-eval-atbench) — sibling harness for trajectory safety
+- [nexus-agents](https://github.com/nexus-substrate/nexus-agents) — MCP server + `BenchmarkAdapter` contract
+- [nexus-eval-template](https://github.com/nexus-substrate/nexus-eval-template) — scaffold this repo was built from
+- [nexus-eval-atbench](https://github.com/nexus-substrate/nexus-eval-atbench) — sibling harness for trajectory safety
 - [SWE-bench paper](https://arxiv.org/abs/2310.06770)
 
 ## License
