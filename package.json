@@ -44,9 +44,13 @@
     "nexus-agents": ">=2.33.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.0.0",
+    "eslint": "^10.4.1",
+    "globals": "^17.6.0",
     "nexus-agents": "^2.33.1",
     "typescript": "^5.9.0",
+    "typescript-eslint": "^8.60.1",
     "vitest": "^4.0.0"
   },
   "publishConfig": {
