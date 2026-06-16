@@ -12,7 +12,7 @@
  * @module runner/instance-loader
  */
 
-import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import type { SweBenchInstance, SweBenchVariant } from '../types.js';
@@ -65,10 +65,20 @@ function loadFromFile(path: string): readonly SweBenchInstance[] {
   }
   const raw = readFileSync(path, 'utf8');
   const out: SweBenchInstance[] = [];
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
+  const lines = raw.split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmed = (lines[i] ?? '').trim();
     if (trimmed === '') continue;
-    out.push(JSON.parse(trimmed) as SweBenchInstance);
+    try {
+      out.push(JSON.parse(trimmed) as SweBenchInstance);
+    } catch (caught: unknown) {
+      // A single malformed line (e.g. a truncated last row from an
+      // interrupted cache write) must not abort the whole load. Skip it
+      // and report which file + line was bad so the cause is obvious.
+      const reason = caught instanceof Error ? caught.message : String(caught);
+      // eslint-disable-next-line no-console
+      console.warn(`Skipping malformed JSONL at ${path} line ${String(i + 1)}: ${reason}`);
+    }
   }
   return out;
 }
@@ -125,11 +135,13 @@ async function loadFromHuggingFace(
   }
 
   mkdirSync(dirname(cachePath), { recursive: true });
-  writeFileSync(
-    cachePath,
-    all.map((i) => JSON.stringify(i)).join('\n') + '\n',
-    'utf8'
-  );
+  // Atomic write: serialise to a temp file, then rename into place.
+  // rename(2) is atomic on the same filesystem, so an interrupted write
+  // (process killed, disk full) leaves the temp file — never a truncated
+  // cache that would poison every future read.
+  const tmpPath = `${cachePath}.${String(process.pid)}.tmp`;
+  writeFileSync(tmpPath, all.map((i) => JSON.stringify(i)).join('\n') + '\n', 'utf8');
+  renameSync(tmpPath, cachePath);
   return all;
 }
 
