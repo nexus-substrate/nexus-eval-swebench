@@ -63,9 +63,18 @@ export class SweBenchAdapter
     instance: SweBenchInstance,
     ctx: BenchmarkRunContext
   ): Promise<SweBenchPrediction> {
-    void ctx;
     const start = Date.now();
-    const result = await generatePrediction(instance, this.modelAdapter);
+    // Thread the orchestrator's per-instance timeout (ultimately the
+    // `--timeout` CLI flag via `instanceTimeoutMs`) into the model call.
+    // Fall back to generatePrediction's own default only when the context
+    // supplies no usable budget.
+    const result = await generatePrediction(
+      instance,
+      this.modelAdapter,
+      typeof ctx.timeoutMs === 'number' && ctx.timeoutMs > 0
+        ? { timeoutMs: ctx.timeoutMs }
+        : {}
+    );
 
     const durationMs = Date.now() - start;
     if (!result.ok) {
