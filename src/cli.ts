@@ -16,9 +16,16 @@
  */
 
 import { parseArgs } from 'node:util';
+import { createRequire } from 'node:module';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { runBenchmark, createOpenAIAdapter } from 'nexus-agents';
 import { SweBenchAdapter } from './adapter.js';
 import type { SweBenchAdapterConfig, SweBenchVariant } from './types.js';
+
+const require = createRequire(import.meta.url);
+const packageJson = require('../package.json') as { version: string };
+export const VERSION = packageJson.version;
 
 const VALID_VARIANTS: readonly SweBenchVariant[] = ['lite', 'verified', 'full'];
 
@@ -66,14 +73,14 @@ function parseVariant(input: string | undefined): SweBenchVariant {
   return input as SweBenchVariant;
 }
 
-async function main(argv: readonly string[]): Promise<number> {
+export async function main(argv: readonly string[]): Promise<number> {
   const args = argv.slice(2);
   if (args.includes('--help') || args.includes('-h')) {
     process.stdout.write(HELP);
     return 0;
   }
   if (args.includes('--version') || args.includes('-v')) {
-    process.stdout.write('nexus-eval-swebench 0.2.0\n');
+    process.stdout.write(`nexus-eval-swebench ${VERSION}\n`);
     return 0;
   }
 
@@ -150,12 +157,18 @@ async function main(argv: readonly string[]): Promise<number> {
   return summary.passed === summary.total ? 0 : 1;
 }
 
-main(process.argv)
-  .then((code) => {
-    process.exit(code);
-  })
-  .catch((err: unknown) => {
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`Fatal: ${msg}\n`);
-    process.exit(2);
-  });
+function isDirectExecution(argvPath: string | undefined): boolean {
+  return argvPath !== undefined && import.meta.url === pathToFileURL(resolve(argvPath)).href;
+}
+
+if (isDirectExecution(process.argv[1])) {
+  main(process.argv)
+    .then((code) => {
+      process.exit(code);
+    })
+    .catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`Fatal: ${msg}\n`);
+      process.exit(2);
+    });
+}
